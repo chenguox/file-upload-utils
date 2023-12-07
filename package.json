@@ -1,0 +1,39 @@
+{
+  "name": "file-upload-utils",
+  "version": "1.0.0",
+  "description": "处理大文件上传、秒传、断点+续传的工具包",
+  "main": "index.ts",
+  "scripts": {
+    "commit": "cz",
+    "prettier": "prettier --write .",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepare": "husky install"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chenguox/file-upload-utils.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/chenguox/file-upload-utils/issues"
+  },
+  "homepage": "https://github.com/chenguox/file-upload-utils#readme",
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^6.13.2",
+    "@typescript-eslint/parser": "^6.13.2",
+    "commitizen": "^4.3.0",
+    "cz-conventional-changelog": "^3.3.0",
+    "eslint": "^8.55.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.0.1",
+    "husky": "^8.0.0",
+    "prettier": "^3.1.0"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
+  }
+}
