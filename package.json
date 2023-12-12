@@ -5,6 +5,7 @@
   "main": "index.ts",
   "scripts": {
     "commit": "cz",
+    "lint": "npx lint lib/**",
     "prettier": "prettier --write .",
     "test": "echo \"Error: no test specified\" && exit 1",
     "prepare": "husky install"
