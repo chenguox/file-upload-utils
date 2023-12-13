@@ -1,11 +1,12 @@
 import { Emitter } from './emitter';
 import { chunkWorker } from './chunk';
 import { UploadEventKey, UploadEventType, SliceUploadFileChunk } from './type';
-import { ajaxRequest } from './ajax';
+import { AjaxRequestOptions, ajaxRequest } from './ajax';
+import { promisePool } from './pool';
 
 
 
-class SliceUpload {
+export default class SliceUpload {
   private file: File | null
   private filename: string
   private chunkSize: number
@@ -71,9 +72,9 @@ class SliceUpload {
     this.sliceFileChunks = await chunkWorker(this.file!, this.chunkSize)
 
     // 处理成 promise 列表
-    const promiseList = this.sliceFileChunks.map(v => {
+    const requestList: any = this.sliceFileChunks.map(v => {
       return () => {
-        const promise = new Promise((resolve, reject) => {
+        const promise = new Promise<any>((resolve, reject) => {
           // 获取当前的 chunk 对象
           const chunk = this.findSliceFileChunk(v.chunkHash)!
 
@@ -87,30 +88,48 @@ class SliceUpload {
 
 
           // 请求参数
-          const requestOptions = {
+          const requestOptions: AjaxRequestOptions = {
             url: "http://localhost:8888/upload/",
             method: "POST",
             data,
-            onError: () => {
+            onError: (error) => {
+              // 更新当前的 chunk 状态为错误
+              chunk.status = 'error'
 
+              // 通知外界该 分片 出错了
+              this.emit('error', error)
             },
-            onSuccess: () => {
+            onSuccess: (result) => {
+              resolve(result)
+            },
+            onUploadProgress: (event) => {
+              // 更新当前 chunk 的进度条
+              chunk.progress = event.percent
 
-            },
-            onUploadProgress: () => {
-              // 更新当前chunk的进度条
-              chunk.progress =
+              // 通知外界的总进度情况
+              const progress = this.progress
+              this.emit('progress', { progress })
             }
           }
 
           const instance = ajaxRequest(requestOptions)
-
+          instance.request()
         })
 
         return promise
       }
+    })
 
-
+    promisePool({
+      requestList,
+      limit: this.poolCount,
+      resolve: () => {
+        console.log('完成')
+        // this.emitFinish()
+      },
+      reject: () => {
+        console.log('reject')
+      }
     })
   }
 
@@ -124,15 +143,14 @@ class SliceUpload {
     return this.sliceFileChunks.find(chunk => chunk.chunkHash === chunkHash)
   }
 
-
-
+  /**
+   * 上传总进度
+   */
+  get progress() {
+    const chunks = this.sliceFileChunks
+    const length = chunks.length
+    if (!length) return 0
+    const progressTotal = chunks.map(chunk => chunk.progress).reduce((pre, cur) => pre + cur, 0)
+    return progressTotal / length
+  }
 }
-
-
-
-const uploader = new SliceUpload({
-  chunkSize: 1024 ** 2 * 2,
-  poolCount: 4
-})
-
-uploader.setFile()

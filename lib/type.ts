@@ -17,7 +17,11 @@ export interface SliceUploadFileChunk {
 
 export interface UploadEventType {
   start: () => void
+  // finish: (params: UploadFinishParams) => void
   progress: (params: { progress: number }) => void
+  error: (error: unknown) => void
+  pause: () => void
+  cancel: () => void
 }
 
 export type UploadEventKey = keyof UploadEventType

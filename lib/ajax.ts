@@ -55,7 +55,7 @@ export const ajaxRequest: AjaxRequestHandler = (option) => {
   }
 
   xhr.addEventListener('load', () => {
-    if (xhr.status > 200 && xhr.status < 300) {
+    if (xhr.status >= 200 && xhr.status < 300) {
       option.onSuccess?.(xhr.response)
     }
   })
