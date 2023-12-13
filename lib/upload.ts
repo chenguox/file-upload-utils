@@ -1,6 +1,6 @@
 import { Emitter } from './emitter';
 import { chunkWorker } from './chunk';
-import { UploadEventKey, UploadEventType, SliceUploadFileChunk } from './type';
+import { UploadEventKey, UploadEventType, SliceUploadFileChunk, SliceUploadStatus } from './type';
 import { AjaxRequestOptions, ajaxRequest } from './ajax';
 import { promisePool } from './pool';
 
@@ -59,7 +59,7 @@ export default class SliceUpload {
   */
   async start() {
     // 文件不存在，不执行
-    if (this.file) return
+    if (!this.file) return
 
     // 设置文件名
     this.setFileName(this.file!.name)
@@ -100,15 +100,23 @@ export default class SliceUpload {
               this.emit('error', error)
             },
             onSuccess: (result) => {
+              // 更新当前 chunk 的状态为成功
+              chunk.status = 'success'
+
+              // 更新当前 chunk 的进度为 100
+              chunk.progress = 100
+
+              // 更新进度
+              this.emitProgress()
+              this.emitFinish()
+
               resolve(result)
             },
             onUploadProgress: (event) => {
               // 更新当前 chunk 的进度条
               chunk.progress = event.percent
 
-              // 通知外界的总进度情况
-              const progress = this.progress
-              this.emit('progress', { progress })
+              this.emitProgress()
             }
           }
 
@@ -144,6 +152,41 @@ export default class SliceUpload {
   }
 
   /**
+   * 进度更新并发布
+   */
+  emitProgress() {
+    const progress = this.progress
+    this.emit('progress', { progress })
+  }
+
+  /**
+   * 完成后，发起合并请求
+   */
+  emitFinish() {
+    const status = this.status
+    if (status === 'success') {
+      console.log('发起合并请求')
+      const mergeOption = {
+        url: 'http://localhost:8888/upload/merge',
+        method: 'POST' as const,
+        headers: {
+          'content-type': 'application/json',
+        },
+        data: JSON.stringify({
+          // 服务器存储的文件名: hash+文件后缀
+          fileName: this.filename,
+          // 用于服务器合并文件
+          size: this.chunkSize,
+        }),
+      }
+
+      const xhr = ajaxRequest(mergeOption)
+      xhr.request()
+    }
+  }
+
+
+  /**
    * 上传总进度
    */
   get progress() {
@@ -152,5 +195,31 @@ export default class SliceUpload {
     if (!length) return 0
     const progressTotal = chunks.map(chunk => chunk.progress).reduce((pre, cur) => pre + cur, 0)
     return progressTotal / length
+  }
+
+  /**
+   * 状态
+   */
+  get status(): SliceUploadStatus {
+    const chunks = this.sliceFileChunks
+    if (!chunks.length)
+      return 'ready'
+
+    // if (this.isCancel)
+    //   return 'cancel'
+
+    // if (this.isPause)
+    //   return 'pause'
+
+    if (chunks.some(v => v.status === 'uploading'))
+      return 'uploading'
+
+    if (chunks.every(v => v.status === 'success'))
+      return 'success'
+
+    if (chunks.some(v => v.status === 'error'))
+      return 'error'
+
+    return 'ready'
   }
 }

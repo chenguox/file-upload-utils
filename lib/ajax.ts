@@ -2,12 +2,14 @@ export interface RequestProgressEvent extends ProgressEvent {
   percent: number
 }
 
+export type RequestHeaders = Headers | Record<string, string | number | null | undefined>
+
 export interface AjaxRequestOptions {
   url: string
   method: 'GET' | 'POST'
   timeout?: number
   data: XMLHttpRequestBodyInit | FormData
-  headers?: Headers
+  headers?: RequestHeaders
   responseType?: XMLHttpRequestResponseType
   onLoad?: () => void
   onError?: (e: AjaxRequestError) => void
