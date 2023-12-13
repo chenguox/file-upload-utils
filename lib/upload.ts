@@ -3,16 +3,19 @@ import { chunkWorker } from './chunk';
 import { UploadEventKey, UploadEventType, SliceUploadFileChunk, SliceUploadStatus } from './type';
 import { AjaxRequestOptions, ajaxRequest } from './ajax';
 import { promisePool } from './pool';
+import { getCurFileHash } from './hash';
 
 
 
 export default class SliceUpload {
   private file: File | null
   private filename: string
+  private fileHash: string
   private chunkSize: number
   private sliceFileChunks: SliceUploadFileChunk[]
   private poolCount: number
   private events = new Emitter()
+  private isExist: boolean
 
   constructor(options) {
     this.chunkSize = options.chunkSize || 1024 ** 2 * 2
@@ -63,6 +66,21 @@ export default class SliceUpload {
 
     // 设置文件名
     this.setFileName(this.file!.name)
+
+    // 生成文件 hash
+    if (!this.fileHash) {
+      this.fileHash = await getCurFileHash(this.file, this.chunkSize)
+    }
+
+    // 预检
+    const result = await this.verifyFile()
+    // 服务器已经存在该文件
+    if (result) {
+      this.emit('progress', { progress: 100 })
+      return
+    }
+
+    console.log(result)
 
     // 判断文件大小，获取文件的 hash 值
 
@@ -141,6 +159,32 @@ export default class SliceUpload {
     })
   }
 
+  /**
+   * 对文件进行预检
+   */
+  async verifyFile() {
+    return new Promise(async (resolve, reject) => {
+      const verifyOption = {
+        url: 'http://localhost:8888/upload/verify',
+        method: 'POST' as const,
+        headers: {
+          'content-type': 'application/json',
+        },
+        data: JSON.stringify({
+          filename: this.filename,
+          fileHash: this.fileHash,
+        }),
+        onSuccess: (result) => {
+          const data = JSON.parse(result)
+          resolve(data.data)
+        },
+      }
+
+      const xhr = ajaxRequest(verifyOption)
+      await xhr.request()
+    })
+  }
+
 
   /**
    * 根据hash值找到对应的分片
@@ -173,8 +217,9 @@ export default class SliceUpload {
           'content-type': 'application/json',
         },
         data: JSON.stringify({
+          fileHash: this.fileHash,
           // 服务器存储的文件名: hash+文件后缀
-          fileName: this.filename,
+          filename: this.filename,
           // 用于服务器合并文件
           size: this.chunkSize,
         }),
