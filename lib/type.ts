@@ -25,3 +25,11 @@ export interface UploadEventType {
 }
 
 export type UploadEventKey = keyof UploadEventType
+
+export interface IReturnOptions {
+  url: string
+  method: 'GET' | 'POST'
+  data: FormData
+}
+
+export type UploadRequest = (params: SliceUploadFileChunk) => IReturnOptions

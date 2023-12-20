@@ -11,7 +11,9 @@ export interface AjaxRequestOptions {
   data: XMLHttpRequestBodyInit | FormData
   headers?: RequestHeaders
   responseType?: XMLHttpRequestResponseType
+  readystatechange?: () => void
   onLoad?: () => void
+  onAbort?: (e: AjaxRequestError) => void
   onError?: (e: AjaxRequestError) => void
   onSuccess?: (response: any) => void
   onUploadProgress?: (e: RequestProgressEvent) => void
@@ -55,6 +57,10 @@ export const ajaxRequest: AjaxRequestHandler = (option) => {
   if (option.responseType) {
     xhr.responseType = option.responseType
   }
+
+  xhr.addEventListener('readystatechange', () => {
+    option.readystatechange?.()
+  })
 
   xhr.addEventListener('load', () => {
     if (xhr.status >= 200 && xhr.status < 300) {

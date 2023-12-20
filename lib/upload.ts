@@ -1,7 +1,7 @@
 import { Emitter } from './emitter';
 import { chunkWorker } from './chunk';
-import { UploadEventKey, UploadEventType, SliceUploadFileChunk, SliceUploadStatus } from './type';
-import { AjaxRequestOptions, ajaxRequest } from './ajax';
+import { UploadEventKey, UploadEventType, SliceUploadFileChunk, SliceUploadStatus, UploadRequest } from './type';
+import { AjaxRequestOptions, ajaxRequest, CustomXHR } from './ajax';
 import { promisePool } from './pool';
 import { getCurFileHash } from './hash';
 
@@ -16,6 +16,12 @@ export default class SliceUpload {
   private poolCount: number
   private events = new Emitter()
   private isExist: boolean
+
+  private isCancel = false
+  private isPause = false
+
+  private uploadRequest: UploadRequest
+  private xhr: (CustomXHR | null)[] = []
 
   constructor(options) {
     this.chunkSize = options.chunkSize || 1024 ** 2 * 2
@@ -56,13 +62,19 @@ export default class SliceUpload {
     this.filename = name;
   }
 
+  /**
+   * 设置上传请求
+   * @param request
+   */
+  setUploadRequest(request: UploadRequest) {
+    this.uploadRequest = request
+  }
 
   /**
    *
   */
   async start() {
-    // 文件不存在，不执行
-    if (!this.file) return
+    this.check()
 
     // 设置文件名
     this.setFileName(this.file!.name)
@@ -80,10 +92,6 @@ export default class SliceUpload {
       return
     }
 
-    console.log(result)
-
-    // 判断文件大小，获取文件的 hash 值
-
     // 判断文件是否超过设置的 chunkSize 大小
     // 没有
     console.log(`开始对[${this.file!.name}]文件进行切片`);
@@ -95,21 +103,25 @@ export default class SliceUpload {
         const promise = new Promise<any>((resolve, reject) => {
           // 获取当前的 chunk 对象
           const chunk = this.findSliceFileChunk(v.chunkHash)!
-
-          // 文件数据
-          const data = new FormData()
-          data.append('chunk', v.chunk);
-          data.append('index', String(v.index));
-          data.append('chunkHash', v.chunkHash);
-          data.append('chunkName', v.chunkName);
-          data.append('chunkTotal', String(v.chunkTotal))
-
+          const idx = this.sliceFileChunks.findIndex(v => v.chunkHash === chunk.chunkHash)
 
           // 请求参数
+          const options = this.uploadRequest(v)
           const requestOptions: AjaxRequestOptions = {
-            url: "http://localhost:8888/upload/",
-            method: "POST",
-            data,
+            // url: "http://localhost:8888/upload/",
+            // method: "POST",
+            // data,
+            ...options,
+            readystatechange: () => {
+              if (this.stop) this.xhr[idx]!.abort()
+              return this.stop
+            },
+            onAbort: (error) => {
+              if (chunk.progress !== 100) {
+                chunk.status = 'ready'
+                reject(error)
+              }
+            },
             onError: (error) => {
               // 更新当前的 chunk 状态为错误
               chunk.status = 'error'
@@ -138,13 +150,24 @@ export default class SliceUpload {
             }
           }
 
-          const instance = ajaxRequest(requestOptions)
-          instance.request()
+          // const instance = ajaxRequest(requestOptions)
+          // instance.request()
+          this.xhr[idx] =ajaxRequest(requestOptions)
+          this.xhr[idx]!.request()
         })
 
         return promise
       }
     })
+
+    private check() {
+      if (!this.file)
+        throw new Error('file is required')
+      if (!this.uploadRequestInstance)
+        throw new Error('uploadRequestInstance is required')
+      if (!this.file?.size)
+        throw new Error('file size is 0')
+    }
 
     promisePool({
       requestList,
@@ -228,6 +251,44 @@ export default class SliceUpload {
       const xhr = ajaxRequest(mergeOption)
       xhr.request()
     }
+  }
+
+  /**
+   * 获取分片数据
+   */
+  getChunkData() {
+    console.log('分片数据：',  this.sliceFileChunks)
+    return this.sliceFileChunks
+  }
+
+  /**
+   * 取消请求
+   */
+  abort() {
+    this.xhr.forEach(v => v && v.abort())
+    this.xhr = []
+  }
+
+  /**
+   * 暂停上传
+   */
+  pause() {
+    this.isPause = true
+    this.abort()
+    this.emit('pause')
+  }
+
+  /**
+   * 取消上传
+   */
+  cancel() {
+    this.isCancel = true
+    this.abort()
+    this.emit('cancel')
+  }
+
+  private get stop() {
+    return this.isCancel || this.isPause
   }
 
 
